@@ -18,7 +18,7 @@
 //==============================================================================
 /**
 */
-class C74GenAudioProcessor  : public AudioProcessor
+class C74GenAudioProcessor  : public AudioProcessor, public AudioProcessorValueTreeState::Listener
 {
 public:
     //==============================================================================
@@ -65,6 +65,14 @@ public:
     //==============================================================================
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+
+    //==============================================================================
+    juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
+    juce::AudioProcessorValueTreeState apvts { *this, nullptr, "PARAMETERS", createParameters() };
+    void parameterChanged (const juce::String& paramID, float newValue) override;
+    std::atomic<double> hostTempo {0};
+    std::atomic<double> hostPPQ {0};
+    std::atomic<double> hostTimeSamples {0};
 
 protected:
 	// c74: since Juce does float sample processing and Gen offers double sample

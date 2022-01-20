@@ -14,11 +14,18 @@
 
 //==============================================================================
 C74GenAudioProcessorEditor::C74GenAudioProcessorEditor (C74GenAudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : GenericAudioProcessorEditor (&p), processor (p), tempoLabel(p.hostTempo), 
+    PPQLabel(p.hostPPQ), timeInSamplesLabel(p.hostTimeSamples)
 {
+        
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize (400, 300);
+    setSize (420, 475);
+
+    // host info
+    addAndMakeVisible(tempoLabel);
+    addAndMakeVisible(PPQLabel);
+    addAndMakeVisible(timeInSamplesLabel);
 }
 
 C74GenAudioProcessorEditor::~C74GenAudioProcessorEditor()
@@ -28,15 +35,20 @@ C74GenAudioProcessorEditor::~C74GenAudioProcessorEditor()
 //==============================================================================
 void C74GenAudioProcessorEditor::paint (Graphics& g)
 {
-    g.fillAll (Colours::white);
-
-    g.setColour (Colours::black);
-    g.setFont (15.0f);
-    g.drawFittedText ("Hello World!", getLocalBounds(), Justification::centred, 1);
+    g.fillAll (getLookAndFeel().findColour(ResizableWindow::backgroundColourId));
+    g.setColour (Colours::white);
+    g.setFont (juce::Font ("Helvetica", 15.0f, juce::Font::bold));
+    g.drawFittedText ("Hello World", 0, 0, getWidth(), 30, juce::Justification::centred, 1);
+    
 }
 
 void C74GenAudioProcessorEditor::resized()
 {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
+
+    // host info
+    tempoLabel.setBounds(105,400,50,50);
+    PPQLabel.setBounds(160, 400, 65, 50);
+    timeInSamplesLabel.setBounds(235, 400, 65, 50);
 }

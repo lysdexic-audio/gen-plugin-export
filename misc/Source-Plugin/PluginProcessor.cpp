@@ -19,6 +19,13 @@ C74GenAudioProcessor::C74GenAudioProcessor()
 	m_C74PluginState = (CommonState *)C74_GENPLUGIN::create(44100, 64);
 	C74_GENPLUGIN::reset(m_C74PluginState);
 
+	// add parameter listeners
+    for (int i = 0; i < C74_GENPLUGIN::num_params(); ++i)
+    {
+        juce::String parameter_name(C74_GENPLUGIN::getparametername(m_C74PluginState, i));
+        apvts.addParameterListener (parameter_name, this);
+    }
+
 	m_InputBuffers = new t_sample *[C74_GENPLUGIN::num_inputs()];
 	m_OutputBuffers = new t_sample *[C74_GENPLUGIN::num_outputs()];
 	
@@ -165,6 +172,10 @@ void C74GenAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
 	m_C74PluginState->sr = sampleRate;
 	m_C74PluginState->vs = samplesPerBlock;
 
+	// reset and hold LFO phasors
+    setParameter(5, 1.0f);
+    setParameter(10, 1.0f);
+
 	assureBufferSize(samplesPerBlock);
 }
 
@@ -177,6 +188,26 @@ void C74GenAudioProcessor::releaseResources()
 void C74GenAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
 	assureBufferSize(buffer.getNumSamples());
+
+	// TODO add both to new 'sync' method 
+    // release LFO phasors
+    setParameter(5, 0.0f);
+    setParameter(10, 0.0f);
+     
+    // report host information
+    if (auto* playHead = getPlayHead())
+    {
+        // You can ONLY call this from your processBlock() method! 
+        // Calling it at other times will produce undefined behaviour, 
+        // as the host may not have any context in which a time would make sense, 
+        // and some hosts will almost certainly have multithreading issues if it's 
+        // not called on the audio thread.
+        juce::AudioPlayHead::CurrentPositionInfo hostinfo;
+        playHead->getCurrentPosition(hostinfo);
+        hostTempo.store(hostinfo.bpm);
+        hostPPQ.store(hostinfo.ppqPosition);
+        hostTimeSamples.store(hostinfo.timeInSamples);
+    }
 	
 	// fill input buffers
 	for (int i = 0; i < C74_GENPLUGIN::num_inputs(); i++) {
@@ -212,7 +243,7 @@ void C74GenAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& 
 //==============================================================================
 bool C74GenAudioProcessor::hasEditor() const
 {
-    return false; // (change this to true if you choose to supply an editor)
+    return true; // (change this to true if you choose to supply an editor)
 }
 
 AudioProcessorEditor* C74GenAudioProcessor::createEditor()
@@ -268,4 +299,58 @@ void C74GenAudioProcessor::assureBufferSize(long bufferSize)
 		
 		m_CurrentBufferSize = bufferSize;
 	}
+}
+
+//===============================================================================
+void C74GenAudioProcessor::parameterChanged (const juce::String& paramID, float newValue)
+{
+    // This is called whenever a parameter is changed. We check the JUCE parameter 
+    // against the Gen parameters and set the value if they match.
+
+    for (int i = 0; i < C74_GENPLUGIN::num_params(); i++)
+    {
+        if (paramID == juce::String(getParameterName(i)))
+        {
+            C74_GENPLUGIN::setparameter(m_C74PluginState, i, newValue, NULL);
+            return;
+        }
+    }
+}
+
+//===============================================================================
+juce::AudioProcessorValueTreeState::ParameterLayout C74GenAudioProcessor::createParameters()
+{
+    // Here we add all of the Gen Parameters to the AudioProcessorValueTreeState
+    // The APVTS::ParameterLayout is the best way to manage all of your parameters in JUCE
+    
+    m_C74PluginState = (CommonState*) C74_GENPLUGIN::create (44100, 64);
+    C74_GENPLUGIN::reset (m_C74PluginState);
+
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+    
+    for (int i = 0; i < C74_GENPLUGIN::num_params(); i++)
+    {
+        // NOTE: ensure the param_id is lowercase to match gen api
+        juce::String paramName = getParameterName(i);
+        juce::String paramLabelName = paramName.toUpperCase();
+        float min_value = C74_GENPLUGIN::getparametermin(m_C74PluginState, i);
+        float max_value = C74_GENPLUGIN::getparametermax(m_C74PluginState, i);
+        float default_value = m_C74PluginState->params[i].defaultvalue;
+
+        // units (enum) *needs enum vals for combobox, buttons
+        // char units = m_C74PluginState->params[i].units;
+
+        // A factor of 1.0 has no skewing effect at all. If the factor is < 1.0,
+        // the lower end of the range will fill more of the slider's length;
+        // if the factor is > 1.0, the upper end of the range will be expanded.
+        float skew_factor = 0.65f;
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(paramName, paramLabelName,
+                                                                     juce::NormalisableRange<float> (min_value, max_value,
+                                                                                                     0.0001f, skew_factor),
+                                                                     default_value));
+    }
+    
+    return { params.begin(), params.end() };
+    
 }

@@ -14,11 +14,32 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
+struct AtomicLabel:
+    juce::Component,
+    juce::Timer
+{
+    AtomicLabel(std::atomic<double>& valueToUse): value(valueToUse)
+    {
+        startTimerHz(60);
+        addAndMakeVisible(label);
+    }
+    
+    void resized() override
+    {
+        label.setBounds(getLocalBounds());
+    }
+    
+    void timerCallback() override {
+        label.setText(juce::String(value.load()), juce::dontSendNotification);
+    }
+    juce::Label label;
+    std::atomic<double>& value;
+};
 
 //==============================================================================
 /**
 */
-class C74GenAudioProcessorEditor  : public AudioProcessorEditor
+class C74GenAudioProcessorEditor : public juce::GenericAudioProcessorEditor
 {
 public:
     C74GenAudioProcessorEditor (C74GenAudioProcessor&);
@@ -32,6 +53,12 @@ private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     C74GenAudioProcessor& processor;
+
+    
+    // host info
+    AtomicLabel tempoLabel;
+    AtomicLabel PPQLabel;
+    AtomicLabel timeInSamplesLabel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (C74GenAudioProcessorEditor)
 };
